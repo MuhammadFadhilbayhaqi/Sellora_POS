@@ -1,0 +1,101 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* Color Palette */
+  --sidebar-bg: #1a1d2e;
+  --sidebar-hover: #252840;
+  --sidebar-active: #2d3154;
+  --sidebar-text: #8b8fa3;
+  --sidebar-text-active: #ffffff;
+  --sidebar-accent: #6c5ce7;
+
+  --topbar-bg: #ffffff;
+  --topbar-shadow: 0 1px 12px rgba(0, 0, 0, 0.06);
+
+  --main-bg: #f0f2f5;
+  --card-bg: #ffffff;
+
+  --text-primary: #1a1d2e;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+
+  --accent: #6c5ce7;
+  --accent-light: #a29bfe;
+  --accent-gradient: linear-gradient(135deg, #6c5ce7, #a29bfe);
+
+  --danger: #ff6b6b;
+  --success: #2ed573;
+  --warning: #ffa502;
+
+  --border-color: #e5e7eb;
+  --border-radius: 10px;
+
+  /* Layout */
+  --sidebar-width: 260px;
+  --topbar-height: 64px;
+
+  /* Typography */
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--text-primary);
+  background-color: var(--main-bg);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  overflow: hidden;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--sidebar-hover);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--sidebar-active);
+}
+
+/* Loading state */
+.app-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a1d2e 0%, #2d2150 50%, #1a1d2e 100%);
+}
+
+.app-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--accent-light);
+  border-radius: 50%;
+  animation: loadSpin 0.8s linear infinite;
+}
+
+@keyframes loadSpin {
+  to { transform: rotate(360deg); }
+}
