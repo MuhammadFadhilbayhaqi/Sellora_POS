@@ -1,0 +1,419 @@
+/* ═══════════════════════════════════════════════════
+   My Account Page Styles
+   ═══════════════════════════════════════════════════ */
+
+.ma-page {
+  max-width: 900px;
+  margin: 0 auto;
+  animation: fadeInMA 0.4s ease;
+}
+
+@keyframes fadeInMA {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ─── Page Header ──────────────────────────────────── */
+
+.ma-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+.ma-header-info h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+  margin: 0 0 4px;
+}
+
+.ma-header-info p {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* ─── Save Indicator ───────────────────────────────── */
+
+.ma-save-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: transparent;
+  transition: all 0.3s ease;
+  min-width: 120px;
+  justify-content: center;
+}
+
+.ma-save-indicator.saving {
+  color: var(--text-secondary);
+  background: rgba(108, 92, 231, 0.06);
+}
+
+.ma-save-indicator.saved {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.ma-save-indicator svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ma-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(108, 92, 231, 0.15);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spinMA 0.7s linear infinite;
+}
+
+@keyframes spinMA {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ─── Content Layout ───────────────────────────────── */
+
+.ma-content {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 24px;
+}
+
+/* ─── Avatar Card (Left Column) ────────────────────── */
+
+.ma-avatar-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 28px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: all 0.3s ease;
+  position: sticky;
+  top: 32px;
+  align-self: start;
+}
+
+.ma-avatar-card:hover {
+  border-color: rgba(108, 92, 231, 0.15);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.ma-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 16px rgba(108, 92, 231, 0.25);
+}
+
+.ma-avatar span {
+  font-size: 32px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+
+.ma-avatar-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+  word-break: break-word;
+}
+
+.ma-avatar-username {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 16px;
+  word-break: break-word;
+}
+
+.ma-avatar-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: rgba(16, 185, 129, 0.08);
+  color: #10b981;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ma-avatar-badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ─── Form Area (Right Column) ─────────────────────── */
+
+.ma-form-area {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ma-section {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 24px;
+  transition: all 0.3s ease;
+}
+
+.ma-section:hover {
+  border-color: rgba(108, 92, 231, 0.15);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.ma-section-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.ma-section-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.1), rgba(108, 92, 231, 0.05));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ma-section-icon svg {
+  width: 20px;
+  height: 20px;
+  color: var(--accent);
+}
+
+.ma-section-icon-security {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05));
+}
+
+.ma-section-icon-security svg {
+  color: #f59e0b;
+}
+
+.ma-section-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 2px;
+}
+
+.ma-section-header p {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ─── Form Fields ──────────────────────────────────── */
+
+.ma-field {
+  margin-bottom: 16px;
+}
+
+.ma-field:last-child {
+  margin-bottom: 0;
+}
+
+.ma-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+}
+
+.ma-field input,
+.ma-field select,
+.ma-field textarea {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--main-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--text-primary);
+  transition: all 0.25s ease;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.ma-field input::placeholder,
+.ma-field textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.ma-field input:focus,
+.ma-field select:focus,
+.ma-field textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.1);
+  background: var(--card-bg);
+}
+
+.ma-fields-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* ─── Password Input with Toggle ───────────────────── */
+
+.ma-password-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ma-password-input input {
+  width: 100%;
+  padding-right: 48px;
+}
+
+.ma-password-toggle {
+  position: absolute;
+  right: 6px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+}
+
+.ma-password-toggle:hover {
+  background: var(--main-bg);
+  color: var(--text-primary);
+}
+
+.ma-password-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ─── Password Messages ────────────────────────────── */
+
+.ma-password-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 12px;
+  animation: fadeInMA 0.3s ease;
+}
+
+.ma-password-message svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.ma-password-error {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.ma-password-success {
+  background: rgba(16, 185, 129, 0.08);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+/* ─── Change Password Button ──────────────────────── */
+
+.ma-change-password-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  margin-top: 16px;
+  background: var(--accent-gradient);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(108, 92, 231, 0.25);
+}
+
+.ma-change-password-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(108, 92, 231, 0.35);
+}
+
+.ma-change-password-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.ma-change-password-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.ma-change-password-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ─── Responsive ───────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .ma-content {
+    grid-template-columns: 1fr;
+  }
+
+  .ma-avatar-card {
+    position: static;
+  }
+
+  .ma-fields-row {
+    grid-template-columns: 1fr;
+  }
+}

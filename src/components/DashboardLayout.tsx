@@ -63,16 +63,9 @@ function DashboardLayout({ user, onLogout }: DashboardLayoutProps) {
     );
   }
 
-  // Settings gets its own layout with settings sub-sidebar
+  // Settings gets its own full-screen layout (no main sidebar)
   if (activeMenu.startsWith('settings')) {
-    return (
-      <div className="dashboard-layout cashier-mode">
-        <Sidebar activeMenu={activeMenu} onMenuChange={setActiveMenu} onLogout={onLogout} />
-        <main className="dashboard-main cashier-main">
-          <SettingsLayout onBack={() => setActiveMenu('dashboard')} />
-        </main>
-      </div>
-    );
+    return <SettingsLayout onBack={() => setActiveMenu('dashboard')} />;
   }
 
   const renderPage = () => {

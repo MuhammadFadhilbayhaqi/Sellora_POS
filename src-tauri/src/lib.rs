@@ -6,10 +6,13 @@ use std::sync::Mutex;
 use tauri::{Manager, State};
 use uuid::Uuid;
 
+mod printer;
+
 // App state to hold DB connection and current session
 pub struct AppState {
     pub db: Mutex<Connection>,
     pub current_user: Mutex<Option<UserInfo>>,
+    pub printer_state: Mutex<printer::PrinterState>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -238,6 +241,28 @@ pub struct CartItemInput {
     pub discount: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BusinessProfile {
+    pub id: String,
+    pub business_name: String,
+    pub contact_number: String,
+    pub email: String,
+    pub business_category: String,
+    pub address: String,
+    pub logo_base64: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserAccount {
+    pub id: i64,
+    pub nama: String,
+    pub username: String,
+    pub email: String,
+    pub phone: String,
+}
+
 // ─── Database Initialization ────────────────────────────────
 
 fn init_db(db: &Connection) {
@@ -299,14 +324,6 @@ fn init_db(db: &Connection) {
             effective_from TEXT,
             effective_to TEXT,
             created_at TEXT NOT NULL,
-            FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS inventories (
-            id TEXT PRIMARY KEY,
-            variant_id TEXT NOT NULL UNIQUE,
-            quantity REAL NOT NULL DEFAULT 0,
-            updated_at TEXT NOT NULL,
             FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE CASCADE
         );
 
@@ -457,9 +474,27 @@ fn init_db(db: &Connection) {
             FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS business_profiles (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            business_name TEXT NOT NULL DEFAULT '',
+            contact_number TEXT NOT NULL DEFAULT '',
+            email TEXT NOT NULL DEFAULT '',
+            business_category TEXT NOT NULL DEFAULT '',
+            address TEXT NOT NULL DEFAULT '',
+            logo_base64 TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(user_id)
+        );
+
         PRAGMA foreign_keys = ON;",
     )
     .expect("Failed to create tables");
+
+    // Migration: add email and phone columns to users table
+    let _ = db.execute("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''", []);
+    let _ = db.execute("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''", []);
 }
 
 // ─── Helper: Generate SKU ───────────────────────────────────
@@ -1539,14 +1574,6 @@ fn receive_purchase_order(
         )
         .map_err(|e| format!("Gagal update item: {}", e))?;
 
-        // Upsert inventory
-        db.execute(
-            "INSERT INTO inventories (id, variant_id, quantity, updated_at)
-             VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(variant_id) DO UPDATE SET quantity = quantity + ?3, updated_at = ?4",
-            rusqlite::params![Uuid::new_v4().to_string(), variant_id, qty, now],
-        )
-        .map_err(|e| format!("Gagal update inventory: {}", e))?;
 
         // Create movement record
         db.execute(
@@ -1632,7 +1659,7 @@ fn add_adjustment(
     // Get old quantity
     let old_qty: f64 = db
         .query_row(
-            "SELECT COALESCE((SELECT quantity FROM inventories WHERE variant_id = ?1), 0)",
+            "SELECT COALESCE((SELECT SUM(quantity) FROM inventory_movements WHERE variant_id = ?1), 0)",
             rusqlite::params![variant_id],
             |row| row.get(0),
         )
@@ -1649,14 +1676,6 @@ fn add_adjustment(
     )
     .map_err(|e| format!("Gagal mencatat adjustment: {}", e))?;
 
-    // Upsert inventory
-    db.execute(
-        "INSERT INTO inventories (id, variant_id, quantity, updated_at)
-         VALUES (?1, ?2, ?3, ?4)
-         ON CONFLICT(variant_id) DO UPDATE SET quantity = ?3, updated_at = ?4",
-        rusqlite::params![Uuid::new_v4().to_string(), variant_id, new_quantity, now],
-    )
-    .map_err(|e| format!("Gagal update inventory: {}", e))?;
 
     // Movement record
     db.execute(
@@ -1743,14 +1762,6 @@ fn add_waste(
     )
     .map_err(|e| format!("Gagal mencatat waste: {}", e))?;
 
-    // Reduce inventory
-    db.execute(
-        "INSERT INTO inventories (id, variant_id, quantity, updated_at)
-         VALUES (?1, ?2, -?3, ?4)
-         ON CONFLICT(variant_id) DO UPDATE SET quantity = quantity - ?3, updated_at = ?4",
-        rusqlite::params![Uuid::new_v4().to_string(), variant_id, quantity, now],
-    )
-    .map_err(|e| format!("Gagal update inventory: {}", e))?;
 
     // Movement record
     db.execute(
@@ -1787,14 +1798,6 @@ fn add_return(
     let now = now_timestamp();
     let return_id = Uuid::new_v4().to_string();
 
-    // Reduce inventory
-    db.execute(
-        "INSERT INTO inventories (id, variant_id, quantity, updated_at)
-         VALUES (?1, ?2, -?3, ?4)
-         ON CONFLICT(variant_id) DO UPDATE SET quantity = quantity - ?3, updated_at = ?4",
-        rusqlite::params![Uuid::new_v4().to_string(), variant_id, quantity, now],
-    )
-    .map_err(|e| format!("Gagal update inventory: {}", e))?;
 
     // Movement record
     db.execute(
@@ -2250,13 +2253,6 @@ fn pay_transaction(
      .collect();
 
     for (variant_id, quantity) in items {
-        // Reduce inventory
-        db.execute(
-            "INSERT INTO inventories (id, variant_id, quantity, updated_at)
-             VALUES (?1, ?2, -?3, ?4)
-             ON CONFLICT(variant_id) DO UPDATE SET quantity = quantity - ?3, updated_at = ?4",
-            rusqlite::params![Uuid::new_v4().to_string(), variant_id, quantity, now],
-        ).map_err(|e| format!("Gagal update inventory: {}", e))?;
 
         // Movement record
         db.execute(
@@ -2348,13 +2344,6 @@ fn refund_transaction(state: State<AppState>, transaction_id: String, refund_rea
      .collect();
 
     for (variant_id, quantity) in items {
-        // Add back to inventory
-        db.execute(
-            "INSERT INTO inventories (id, variant_id, quantity, updated_at)
-             VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(variant_id) DO UPDATE SET quantity = quantity + ?3, updated_at = ?4",
-            rusqlite::params![Uuid::new_v4().to_string(), variant_id, quantity, now],
-        ).map_err(|e| format!("Gagal update inventory: {}", e))?;
 
         // Movement record (positive = stock restored)
         db.execute(
@@ -2596,6 +2585,212 @@ fn get_sales_per_method(
     for row in rows { items.push(row.map_err(|e| format!("Row error: {}", e))?); }
     Ok(serde_json::json!(items))
 }
+// ─── User Account Commands ──────────────────────────────────
+
+#[tauri::command]
+fn get_user_account(state: State<AppState>) -> Result<UserAccount, String> {
+    let user_id = get_current_user_id(&state)?;
+    let db = state.db.lock().map_err(|e| format!("DB lock error: {}", e))?;
+
+    db.query_row(
+        "SELECT id, nama, username, email, phone FROM users WHERE id = ?1",
+        rusqlite::params![user_id],
+        |row| {
+            Ok(UserAccount {
+                id: row.get(0)?,
+                nama: row.get(1)?,
+                username: row.get(2)?,
+                email: row.get(3)?,
+                phone: row.get(4)?,
+            })
+        },
+    )
+    .map_err(|e| format!("Gagal mengambil data akun: {}", e))
+}
+
+#[tauri::command]
+fn update_user_account(
+    state: State<AppState>,
+    nama: String,
+    username: String,
+    email: String,
+    phone: String,
+    old_password: Option<String>,
+    new_password: Option<String>,
+) -> Result<String, String> {
+    let user_id = get_current_user_id(&state)?;
+    let nama = nama.trim().to_string();
+    let username = username.trim().to_string();
+    let email = email.trim().to_string();
+    let phone = phone.trim().to_string();
+
+    if nama.is_empty() || username.is_empty() {
+        return Err("Nama dan username harus diisi".into());
+    }
+
+    let db = state.db.lock().map_err(|e| format!("DB lock error: {}", e))?;
+
+    // Check username uniqueness (exclude current user)
+    let existing: Result<i64, _> = db.query_row(
+        "SELECT id FROM users WHERE username = ?1 AND id != ?2",
+        rusqlite::params![username, user_id],
+        |row| row.get(0),
+    );
+    if existing.is_ok() {
+        return Err("Username sudah digunakan oleh pengguna lain".into());
+    }
+
+    // Handle password change if requested
+    if let (Some(old_pw), Some(new_pw)) = (&old_password, &new_password) {
+        if new_pw.len() < 6 {
+            return Err("Password baru minimal 6 karakter".into());
+        }
+
+        let current_hash: String = db
+            .query_row(
+                "SELECT password_hash FROM users WHERE id = ?1",
+                rusqlite::params![user_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Query error: {}", e))?;
+
+        let is_valid = verify(old_pw, &current_hash)
+            .map_err(|e| format!("Verify error: {}", e))?;
+
+        if !is_valid {
+            return Err("Password lama salah".into());
+        }
+
+        let new_hash = hash(new_pw, DEFAULT_COST)
+            .map_err(|e| format!("Hash error: {}", e))?;
+
+        db.execute(
+            "UPDATE users SET nama = ?1, username = ?2, email = ?3, phone = ?4, password_hash = ?5 WHERE id = ?6",
+            rusqlite::params![nama, username, email, phone, new_hash, user_id],
+        )
+        .map_err(|e| format!("Gagal update akun: {}", e))?;
+    } else {
+        db.execute(
+            "UPDATE users SET nama = ?1, username = ?2, email = ?3, phone = ?4 WHERE id = ?5",
+            rusqlite::params![nama, username, email, phone, user_id],
+        )
+        .map_err(|e| format!("Gagal update akun: {}", e))?;
+    }
+
+    // Update session data
+    let mut current_user = state
+        .current_user
+        .lock()
+        .map_err(|e| format!("Session error: {}", e))?;
+    *current_user = Some(UserInfo {
+        id: user_id,
+        nama: nama.clone(),
+        username: username.clone(),
+    });
+
+    Ok("Akun berhasil diperbarui".into())
+}
+
+// ─── Business Profile Commands ──────────────────────────────
+
+#[tauri::command]
+fn get_business_profile(state: State<AppState>) -> Result<BusinessProfile, String> {
+    let user_id = get_current_user_id(&state)?;
+    let db = state.db.lock().map_err(|e| format!("DB lock error: {}", e))?;
+
+    let result = db.query_row(
+        "SELECT id, business_name, contact_number, email, business_category, address, logo_base64, created_at, updated_at FROM business_profiles WHERE user_id = ?1",
+        rusqlite::params![user_id],
+        |row| {
+            Ok(BusinessProfile {
+                id: row.get(0)?,
+                business_name: row.get(1)?,
+                contact_number: row.get(2)?,
+                email: row.get(3)?,
+                business_category: row.get(4)?,
+                address: row.get(5)?,
+                logo_base64: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        },
+    );
+
+    match result {
+        Ok(profile) => Ok(profile),
+        Err(_) => {
+            // Create default empty profile for this user
+            let id = Uuid::new_v4().to_string();
+            let now = now_timestamp();
+            db.execute(
+                "INSERT INTO business_profiles (id, user_id, business_name, contact_number, email, business_category, address, logo_base64, created_at, updated_at) VALUES (?1, ?2, '', '', '', '', '', '', ?3, ?4)",
+                rusqlite::params![id, user_id, now, now],
+            ).map_err(|e| format!("Gagal membuat profil: {}", e))?;
+            Ok(BusinessProfile {
+                id,
+                business_name: String::new(),
+                contact_number: String::new(),
+                email: String::new(),
+                business_category: String::new(),
+                address: String::new(),
+                logo_base64: String::new(),
+                created_at: now.clone(),
+                updated_at: now,
+            })
+        }
+    }
+}
+
+#[tauri::command]
+fn save_business_profile(state: State<AppState>, payload: BusinessProfile) -> Result<String, String> {
+    let user_id = get_current_user_id(&state)?;
+    let db = state.db.lock().map_err(|e| format!("DB lock error: {}", e))?;
+    let now = now_timestamp();
+
+    db.execute(
+        "INSERT OR REPLACE INTO business_profiles (id, user_id, business_name, contact_number, email, business_category, address, logo_base64, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, COALESCE((SELECT created_at FROM business_profiles WHERE user_id = ?2), ?9), ?10)",
+        rusqlite::params![
+            payload.id,
+            user_id,
+            payload.business_name,
+            payload.contact_number,
+            payload.email,
+            payload.business_category,
+            payload.address,
+            payload.logo_base64,
+            now,
+            now,
+        ],
+    ).map_err(|e| format!("Gagal menyimpan profil bisnis: {}", e))?;
+
+    Ok("Profil bisnis berhasil disimpan".into())
+}
+
+// ─── File Save Helper ───────────────────────────────────────
+
+#[tauri::command]
+async fn save_pdf_file(data: String, filename: String) -> Result<String, String> {
+    use base64::Engine;
+    
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&data)
+        .map_err(|e| format!("Base64 decode error: {}", e))?;
+
+    let file = rfd::AsyncFileDialog::new()
+        .set_title("Simpan Struk PDF")
+        .set_file_name(&filename)
+        .add_filter("PDF", &["pdf"])
+        .save_file()
+        .await;
+
+    match file {
+        Some(handle) => {
+            handle.write(&bytes).await.map_err(|e| format!("Gagal menyimpan file: {}", e))?;
+            Ok("File berhasil disimpan".into())
+        }
+        None => Err("Penyimpanan dibatalkan".into()),
+    }
+}
 
 // ─── App Entry ──────────────────────────────────────────────
 
@@ -2614,14 +2809,8 @@ pub fn run() {
 
             // One-off migration to fix old positive RETURN records
             let _ = db.execute("UPDATE inventory_movements SET quantity = -quantity WHERE movement_type = 'RETURN' AND quantity > 0", []);
-            // And forcefully recalculate inventories from scratch so it fixes the faulty computation and is completely idempotent
-            let _ = db.execute(
-                "UPDATE inventories 
-                 SET quantity = COALESCE(
-                     (SELECT SUM(quantity) 
-                      FROM inventory_movements 
-                      WHERE variant_id = inventories.variant_id), 0)", 
-            []);
+            // Migration: drop legacy inventories table (stock is now computed from inventory_movements)
+            let _ = db.execute("DROP TABLE IF EXISTS inventories", []);
 
             // Migration: add status column to taxes if not present
             let _ = db.execute("ALTER TABLE taxes ADD COLUMN status TEXT NOT NULL DEFAULT 'active'", []);
@@ -2639,6 +2828,7 @@ pub fn run() {
             let app_state = AppState {
                 db: Mutex::new(db),
                 current_user: Mutex::new(None),
+                printer_state: Mutex::new(printer::PrinterState::default()),
             };
 
             app.manage(app_state);
@@ -2714,6 +2904,21 @@ pub fn run() {
             get_sales_per_product,
             get_product_sales_history,
             get_sales_per_method,
+            // Printer / Device
+            printer::list_serial_ports,
+            printer::scan_lan_devices,
+            printer::scan_bluetooth_devices,
+            printer::connect_device,
+            printer::disconnect_device,
+            printer::test_print_device,
+            // User Account
+            get_user_account,
+            update_user_account,
+            // Business Profile
+            get_business_profile,
+            save_business_profile,
+            // File
+            save_pdf_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

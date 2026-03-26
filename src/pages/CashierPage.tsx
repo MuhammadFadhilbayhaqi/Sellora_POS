@@ -136,14 +136,21 @@ function CashierPage({ user }: CashierPageProps) {
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
 
-  // Filter products
-  const filteredProducts = inventory.filter(i => {
-    const matchesSearch = i.product_name.toLowerCase().includes(search.toLowerCase()) ||
-      i.sku.toLowerCase().includes(search.toLowerCase()) ||
-      i.variant_name.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = !selectedCategory || i.category_id === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  // Filter products and sort out-of-stock to bottom
+  const filteredProducts = inventory
+    .filter(i => {
+      const matchesSearch = i.product_name.toLowerCase().includes(search.toLowerCase()) ||
+        i.sku.toLowerCase().includes(search.toLowerCase()) ||
+        i.variant_name.toLowerCase().includes(search.toLowerCase());
+      const matchesCategory = !selectedCategory || i.category_id === selectedCategory;
+      return matchesSearch && matchesCategory;
+    })
+    .sort((a, b) => {
+      // Products with stock 0 go to the bottom
+      if (a.quantity === 0 && b.quantity !== 0) return 1;
+      if (a.quantity !== 0 && b.quantity === 0) return -1;
+      return 0;
+    });
 
   // Cart calculations
   const subtotal = cart.reduce((sum, c) => sum + (c.price * c.quantity - c.discount), 0);
@@ -153,10 +160,12 @@ function CashierPage({ user }: CashierPageProps) {
   }, 0);
   const grandTotal = subtotal + taxTotal;
 
-  // Add to cart
+  // Add to cart (block if stock is 0, prevent exceeding stock)
   const addToCart = (item: InventoryItem) => {
+    if (item.quantity <= 0) return; // Cannot add out-of-stock items
     const existing = cart.find(c => c.variant_id === item.variant_id);
     if (existing) {
+      if (existing.quantity >= item.quantity) return; // Cannot exceed available stock
       setCart(cart.map(c =>
         c.variant_id === item.variant_id
           ? { ...c, quantity: c.quantity + 1 }
@@ -181,6 +190,7 @@ function CashierPage({ user }: CashierPageProps) {
       if (c.variant_id !== variantId) return c;
       const newQty = c.quantity + delta;
       if (newQty <= 0) return c;
+      if (delta > 0 && newQty > c.stock) return c; // Cannot exceed available stock
       return { ...c, quantity: newQty };
     }));
   };
@@ -291,21 +301,66 @@ function CashierPage({ user }: CashierPageProps) {
 
   const resumeTransaction = async (tx: Transaction) => {
     try {
-      const items = await invoke<any[]>('get_transaction_items', { transactionId: tx.id });
-      const cartItems: CartItem[] = items.map((i: any) => ({
-        variant_id: i.variant_id,
-        product_name: i.product_name || '',
-        variant_name: i.variant_name || '',
-        sku: i.sku || '',
-        price: i.price,
-        quantity: i.quantity,
-        discount: i.discount,
-        stock: 999,
-      }));
+      // Auto-hold current cart if it has items
+      if (cart.length > 0) {
+        const currentItems = cart.map(c => ({
+          variant_id: c.variant_id,
+          quantity: c.quantity,
+          price: c.price,
+          discount: c.discount,
+        }));
+
+        let holdTxId = currentTxId;
+        if (holdTxId) {
+          // Sync current cart items to existing transaction, then hold it
+          await invoke('update_transaction_items', {
+            transactionId: holdTxId,
+            items: currentItems,
+          });
+          await invoke('hold_transaction', { transactionId: holdTxId });
+        } else {
+          // Create new transaction for current cart items, then hold it
+          const newTx = await invoke<Transaction>('create_transaction', {
+            cashierId: user.id,
+            items: currentItems,
+          });
+          await invoke('hold_transaction', { transactionId: newTx.id });
+        }
+      }
+
+      // Load the resumed hold transaction items
+      const txItems = await invoke<any[]>('get_transaction_items', { transactionId: tx.id });
+      const latestInventory = await invoke<InventoryItem[]>('get_inventory_list');
+      const cartItems: CartItem[] = txItems.map((i: any) => {
+        const invItem = latestInventory.find(inv => inv.variant_id === i.variant_id);
+        return {
+          variant_id: i.variant_id,
+          product_name: i.product_name || '',
+          variant_name: i.variant_name || '',
+          sku: i.sku || '',
+          price: i.price,
+          quantity: i.quantity,
+          discount: i.discount,
+          stock: invItem ? invItem.quantity : 0,
+        };
+      });
+
+      // Set resumed transaction status to OPEN by updating its items
+      await invoke('update_transaction_items', {
+        transactionId: tx.id,
+        items: cartItems.map(c => ({
+          variant_id: c.variant_id,
+          quantity: c.quantity,
+          price: c.price,
+          discount: c.discount,
+        })),
+      });
+
       setCart(cartItems);
       setCurrentTxId(tx.id);
       setCurrentInvoice(tx.invoice_number);
       setShowHoldList(false);
+      await loadData();
     } catch (e) {
       console.error(e);
     }
@@ -377,17 +432,27 @@ function CashierPage({ user }: CashierPageProps) {
               <p>Tidak ada produk ditemukan</p>
             </div>
           ) : (
-            filteredProducts.map((item) => (
-              <div className="product-card" key={item.variant_id} onClick={() => addToCart(item)}>
-                <div className="product-card-name">
-                  {item.product_name}
-                  {item.variant_name !== 'Default' && <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> — {item.variant_name}</span>}
+            filteredProducts.map((item) => {
+              const isOutOfStock = item.quantity <= 0;
+              return (
+                <div
+                  className={`product-card ${isOutOfStock ? 'product-card-disabled' : ''}`}
+                  key={item.variant_id}
+                  onClick={() => !isOutOfStock && addToCart(item)}
+                  style={isOutOfStock ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                >
+                  <div className="product-card-name">
+                    {item.product_name}
+                    {item.variant_name !== 'Default' && <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> — {item.variant_name}</span>}
+                  </div>
+                  <div className="product-card-sku">{item.sku}</div>
+                  <div className="product-card-price">{formatCurrency(item.price)}</div>
+                  <div className="product-card-stock" style={isOutOfStock ? { color: 'var(--danger, #ef4444)' } : {}}>
+                    {isOutOfStock ? 'Stok Habis' : `Stok: ${item.quantity}`}
+                  </div>
                 </div>
-                <div className="product-card-sku">{item.sku}</div>
-                <div className="product-card-price">{formatCurrency(item.price)}</div>
-                <div className="product-card-stock">Stok: {item.quantity}</div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
